@@ -4,6 +4,18 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.9.1] - 2026-07-02
+
+### Fixed
+
+- Co-located baselines are written to their nested
+  `__stories__/<component>/__screenshots__/…` folders again. The story name was
+  passed to `toHaveScreenshot` as a joined string, and Playwright runs
+  `sanitizeForFilePath` on a string name — turning every `/` (and `_`) into `-`,
+  which flattened the whole path into a single file at the repo root. Passing the
+  path as segments keeps the folders intact. This only surfaced on a first run
+  (no committed baselines): existing baselines masked it.
+
 ## [0.9.0] - 2026-06-30
 
 ### Added

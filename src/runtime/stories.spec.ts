@@ -230,7 +230,12 @@ test.describe("storybook stories", () => {
         options.colocate && story.importPath
           ? `${posix.dirname(story.importPath.replace(/^\.\//, ""))}/__screenshots__/${baseName}`
           : baseName
-      await expect(page).toHaveScreenshot(snapshotName, {
+      // Pass the path as segments, not a joined string. Playwright runs
+      // `sanitizeForFilePath` on a string name, which turns every `/` (and `_`)
+      // into `-` — flattening the nested layout into one file at the repo root.
+      // An array is joined verbatim, so the `__stories__/…/__screenshots__/…`
+      // folders survive.
+      await expect(page).toHaveScreenshot(snapshotName.split("/"), {
         fullPage: params.fullPage ?? options.fullPage,
         ...(params.mask.length > 0
           ? { mask: params.mask.map((selector) => page.locator(selector)) }
