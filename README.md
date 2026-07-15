@@ -84,10 +84,11 @@ walking up from the current directory.
 | `--no-build`     | Skip `buildCommand` and screenshot the existing `storybookDir`.             |
 | `--changed`      | Incremental: capture only stories whose fingerprint changed.                |
 | `--only <v>`     | Restrict to an allowlist — an `affected` JSON file or a comma list of IDs.  |
+| `--fingerprint-dir <path>` | Override the config `fingerprintDir` — let a shared CI pipeline own the store path. |
 
 Plus an `affected` subcommand that refreshes the fingerprint store and writes
 the changed-story allowlist without capturing:
-`storybook-screenshots affected [--out file.json]`.
+`storybook-screenshots affected [--out file.json] [--fingerprint-dir <path>]`.
 
 ## Config
 

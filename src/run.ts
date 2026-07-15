@@ -29,6 +29,12 @@ export interface RunOptions {
    * rewrite the fingerprint store on success.
    */
   changed?: boolean
+  /**
+   * Override the committed fingerprint store directory (config `fingerprintDir`).
+   * Lets a shared CI pipeline own the store location so every repo agrees on it
+   * without setting it in each repo's config. Relative to the config's directory.
+   */
+  fingerprintDir?: string
 }
 
 export async function run(opts: RunOptions = {}): Promise<number> {
@@ -44,6 +50,9 @@ export async function run(opts: RunOptions = {}): Promise<number> {
 
   const rootDir = dirname(configPath)
   const config = resolveConfig(await loadConfig(configPath), rootDir)
+  const fingerprintDir = opts.fingerprintDir
+    ? resolve(rootDir, opts.fingerprintDir)
+    : config.fingerprintDir
 
   if (config.buildCommand && !opts.skipBuild) {
     console.log(`▶ ${config.buildCommand}`)
@@ -67,7 +76,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
       indexPath: join(config.storybookDir, "index.json"),
       configPath,
       globalDeps: config.globalDeps,
-      fingerprintDir: config.fingerprintDir,
+      fingerprintDir,
     })
     console.log(`▶ incremental: ${result.reason}`)
     only = result.all ? null : result.storyIds
@@ -107,7 +116,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
   // Only record the new fingerprints once the affected stories actually passed,
   // so a failed run doesn't mark broken stories as up to date.
   if (code === 0 && pendingManifest) {
-    writeFingerprints(config.fingerprintDir, pendingManifest)
+    writeFingerprints(fingerprintDir, pendingManifest)
   }
   return code
 }
@@ -121,6 +130,8 @@ export async function run(opts: RunOptions = {}): Promise<number> {
 export async function affected(opts: {
   configPath?: string
   out?: string
+  /** Override the committed fingerprint store directory (see `RunOptions.fingerprintDir`). */
+  fingerprintDir?: string
 }): Promise<AffectedResult> {
   const cwd = process.cwd()
   const configPath = opts.configPath
@@ -133,15 +144,18 @@ export async function affected(opts: {
   }
   const rootDir = dirname(configPath)
   const config = resolveConfig(await loadConfig(configPath), rootDir)
+  const fingerprintDir = opts.fingerprintDir
+    ? resolve(rootDir, opts.fingerprintDir)
+    : config.fingerprintDir
   const result = computeAffected({
     rootDir,
     statsPath: config.statsFile,
     indexPath: join(config.storybookDir, "index.json"),
     configPath,
     globalDeps: config.globalDeps,
-    fingerprintDir: config.fingerprintDir,
+    fingerprintDir,
   })
-  writeFingerprints(config.fingerprintDir, result.manifest)
+  writeFingerprints(fingerprintDir, result.manifest)
   if (opts.out) {
     writeFileSync(
       resolve(rootDir, opts.out),

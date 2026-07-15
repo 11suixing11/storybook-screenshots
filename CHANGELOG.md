@@ -4,6 +4,16 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.11.0] - 2026-07-15
+
+### Added
+
+- `--fingerprint-dir <path>` CLI flag (and `RunOptions.fingerprintDir` /
+  `affected({ fingerprintDir })`) overrides the config `fingerprintDir`. This
+  lets a shared CI pipeline own the store path and run the tool via `dlx`/`npx`
+  without each repo pinning the package or setting the path in its own config —
+  so the tool version and store location live in one place and can't drift.
+
 ## [0.10.0] - 2026-07-15
 
 ### Changed
