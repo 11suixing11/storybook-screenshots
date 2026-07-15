@@ -6,6 +6,8 @@ export {
   DEFAULT_GLOBAL_DEPS,
   type Manifest,
   type ManifestOptions,
+  readFingerprints,
+  writeFingerprints,
 } from "./affected.js"
 export { defineConfig } from "./config.js"
 export type {

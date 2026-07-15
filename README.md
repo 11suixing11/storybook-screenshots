@@ -85,8 +85,8 @@ walking up from the current directory.
 | `--changed`      | Incremental: capture only stories whose fingerprint changed.                |
 | `--only <v>`     | Restrict to an allowlist — an `affected` JSON file or a comma list of IDs.  |
 
-Plus an `affected` subcommand that refreshes the manifest and writes the
-changed-story allowlist without capturing:
+Plus an `affected` subcommand that refreshes the fingerprint store and writes
+the changed-story allowlist without capturing:
 `storybook-screenshots affected [--out file.json]`.
 
 ## Config
@@ -95,7 +95,7 @@ changed-story allowlist without capturing:
 | ------------------- | -------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
 | `buildCommand`      | `string`                               | —                                            | Command that builds Storybook into `storybookDir`. Omit if pre-built.    |
 | `storybookDir`      | `string`                               | `"storybook-static"`                         | Built Storybook directory (must contain `index.json`).                   |
-| `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared (holds the manifest under `colocate`). |
+| `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared (default parent of `fingerprintDir`). |
 | `colocate`          | `boolean`                              | `false`                                      | Store baselines next to each story's source file (see [Co-location](#co-location)). |
 | `pathSegments`      | `("browser"\|"viewport"\|"theme")[]`   | `["browser","viewport","theme"]`             | Order of the folder segments in a baseline path.                          |
 | `nestedFolders`     | `boolean`                              | `false`                                      | Nest segments as folders (`browser/theme/viewport/`) vs `-`-joined.       |
@@ -109,7 +109,7 @@ changed-story allowlist without capturing:
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
 | `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |
 | `statsFile`         | `string`                               | `<storybookDir>/preview-stats.json`          | Module-graph stats for incremental mode (build with `--stats-json`).      |
-| `manifestFile`      | `string`                               | `<snapshotDir>/manifest.json`                | Committed fingerprint manifest for incremental mode.                      |
+| `fingerprintDir`    | `string`                               | `<snapshotDir>/fingerprints`                 | Committed fingerprint store (a directory of per-story files) for incremental mode. |
 | `globalDeps`        | `string[]`                             | `[".storybook"]`                             | Paths folded into the global fingerprint; a change re-captures all.       |
 | `port`              | `number`                               | `6007`                                       | Port for the built-in static server.                                     |
 
@@ -185,8 +185,9 @@ src/button/
 ```
 
 Combine with theme `group`s and a snapshot glob that matches the new location
-(e.g. `src/**/__screenshots__/**`). The manifest is a single file and still lives
-under `snapshotDir` (or set `manifestFile`).
+(e.g. `src/**/__screenshots__/**`). The fingerprint store is a directory that
+still lives under `snapshotDir` (or set `fingerprintDir`); commit it alongside
+the baselines.
 
 ## Interactive stories
 
@@ -306,20 +307,29 @@ one component. Incremental mode captures only the stories a change set can
 affect; the committed baselines are the cache for the rest.
 
 It works like Chromatic's TurboSnap, but tracks changes with a committed
-**fingerprint manifest** instead of a git diff — so it needs no base ref and
+**fingerprint store** instead of a git diff — so it needs no base ref and
 behaves the same on PRs and on push to the default branch. Build Storybook with
 `--stats-json` to emit a module-dependency graph
 (`storybook-static/preview-stats.json`), then:
 
 1. For each story, hash everything it renders from — its transitive modules from
    the graph (npm deps by their **versioned module path**, source files by
-   **content**) — plus a global fingerprint (`globalDeps`, the config, and the
-   `storybook-screenshots` / `@playwright/test` versions).
-2. Compare against the committed `manifest.json` (under `snapshotDir`):
-   - no manifest, or the global fingerprint changed → **every** story runs;
+   **content**). A separate global fingerprint covers the shared inputs
+   (`globalDeps`, the config, and the `storybook-screenshots` /
+   `@playwright/test` versions).
+2. Compare against the committed store (a directory under `snapshotDir`):
+   - no store, or the global fingerprint changed → **every** story runs;
    - otherwise only stories whose hash changed run.
-3. The refreshed manifest is committed next to the baselines, so after a merge
-   the fingerprints match and nothing re-runs.
+3. The refreshed store is committed next to the baselines, so after a merge the
+   fingerprints match and nothing re-runs.
+
+The store is a **directory**, not one file: `global.json` plus one
+`stories/<id>.txt` per story. That is deliberate — a single flat manifest makes
+every branch touching overlapping story closures rewrite the same lines, so two
+concurrent PRs always collide on it. Per-story files only conflict when both
+branches change the *same* story (which already conflicts on that story's
+baseline PNG). Keeping the global hash out of the per-story files means a
+`.storybook` change flips one small `global.json`, not every story file.
 
 A dependency bump re-captures only the stories that use it (the version is in the
 module path); a theme/config/global change re-captures everything. Granularity is
@@ -332,7 +342,7 @@ storybook-screenshots --update --no-build --changed
 ```
 
 In a sharded pipeline, compute the allowlist once and pass it to every shard.
-`affected` also rewrites `manifest.json`, which must be committed with the
+`affected` also rewrites the fingerprint store, which must be committed with the
 baselines (it lives under `snapshotDir`, so the snapshot glob already covers it):
 
 ```yaml
@@ -341,16 +351,16 @@ baselines (it lives under `snapshotDir`, so the snapshot glob already covers it)
 - uses: actions/upload-artifact@v4
   with: { name: affected, path: affected.json }
 - uses: actions/upload-artifact@v4
-  with: { name: manifest, path: screenshots/__screenshots__/manifest.json }
+  with: { name: fingerprints, path: screenshots/__screenshots__/fingerprints }
 
 # in each shard, after downloading storybook-static + affected:
 - run: npx storybook-screenshots --update --no-build --shard ${{ matrix.shard }}/4 --only affected.json
 
-# in the pr job, restore the manifest next to the baselines before opening the PR.
+# in the pr job, restore the fingerprints dir next to the baselines before opening the PR.
 ```
 
 An `affected.json` of `{ "all": true }` (a global change, or any uncertainty —
-missing stats or manifest) means `--only` runs everything. When no story is
+missing stats or fingerprints) means `--only` runs everything. When no story is
 affected, the run captures nothing and exits cleanly.
 
 ## How it works

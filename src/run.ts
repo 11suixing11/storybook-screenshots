@@ -6,6 +6,7 @@ import {
   type AffectedResult,
   computeAffected,
   type Manifest,
+  writeFingerprints,
 } from "./affected.js"
 import { findConfigFile, loadConfig, resolveConfig } from "./config.js"
 import { RUNTIME_ENV_KEY, type RuntimeOptions } from "./runtime/options.js"
@@ -24,14 +25,10 @@ export interface RunOptions {
   only?: string[]
   /**
    * Incremental mode: capture only stories whose fingerprint changed since the
-   * committed manifest (reuses committed baselines for the rest), then rewrite
-   * the manifest on success.
+   * committed fingerprints (reuses committed baselines for the rest), then
+   * rewrite the fingerprint store on success.
    */
   changed?: boolean
-}
-
-function writeManifest(path: string, manifest: Manifest): void {
-  writeFileSync(path, `${JSON.stringify(manifest, null, 2)}\n`)
 }
 
 export async function run(opts: RunOptions = {}): Promise<number> {
@@ -70,7 +67,7 @@ export async function run(opts: RunOptions = {}): Promise<number> {
       indexPath: join(config.storybookDir, "index.json"),
       configPath,
       globalDeps: config.globalDeps,
-      manifestPath: config.manifestFile,
+      fingerprintDir: config.fingerprintDir,
     })
     console.log(`▶ incremental: ${result.reason}`)
     only = result.all ? null : result.storyIds
@@ -110,14 +107,14 @@ export async function run(opts: RunOptions = {}): Promise<number> {
   // Only record the new fingerprints once the affected stories actually passed,
   // so a failed run doesn't mark broken stories as up to date.
   if (code === 0 && pendingManifest) {
-    writeManifest(config.manifestFile, pendingManifest)
+    writeFingerprints(config.fingerprintDir, pendingManifest)
   }
   return code
 }
 
 /**
- * Compare the freshly built fingerprint manifest against the committed one to
- * find affected stories. Rewrites the committed manifest in place (so it can be
+ * Compare the freshly built fingerprints against the committed store to find
+ * affected stories. Rewrites the committed store in place (so it can be
  * committed alongside the new baselines) and, optionally, writes the allowlist
  * to `out` as `{ all, storyIds }` for a sharded CI run to consume via `--only`.
  */
@@ -142,9 +139,9 @@ export async function affected(opts: {
     indexPath: join(config.storybookDir, "index.json"),
     configPath,
     globalDeps: config.globalDeps,
-    manifestPath: config.manifestFile,
+    fingerprintDir: config.fingerprintDir,
   })
-  writeManifest(config.manifestFile, result.manifest)
+  writeFingerprints(config.fingerprintDir, result.manifest)
   if (opts.out) {
     writeFileSync(
       resolve(rootDir, opts.out),

@@ -4,6 +4,27 @@ All notable changes to this project are documented here. The format is based on
 [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.10.0] - 2026-07-15
+
+### Changed
+
+- **BREAKING:** the incremental-mode fingerprint store is now a **directory** of
+  per-story files instead of a single `manifest.json`. It holds `global.json`
+  plus one `stories/<id>.txt` per story. A single flat manifest made every
+  branch that touched overlapping story closures rewrite the same lines, so two
+  concurrent PRs always collided on it; per-story files only conflict when both
+  branches change the *same* story (which already conflicts on that story's
+  baseline PNG). The config option `manifestFile` is replaced by `fingerprintDir`
+  (default `<snapshotDir>/fingerprints`). No migration needed: an absent store
+  reads as "everything affected", so the first run after upgrading recaptures
+  once and writes the new layout — after that, incremental capture resumes.
+- Per-story fingerprints no longer fold in the global hash; the global
+  fingerprint is tracked separately in `global.json` and a global change still
+  short-circuits to "capture all". This keeps a `.storybook` change from
+  rewriting every per-story file (which would reintroduce the mass conflict).
+- New exports `readFingerprints` / `writeFingerprints`; `ManifestOptions.manifestPath`
+  is replaced by `fingerprintDir`.
+
 ## [0.9.1] - 2026-07-02
 
 ### Fixed
