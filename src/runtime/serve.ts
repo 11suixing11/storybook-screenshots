@@ -28,6 +28,8 @@ export interface StaticServer {
   close: () => Promise<void>
 }
 
+const MAX_PORT_ATTEMPTS = 20
+
 /** Serve `rootDir` over HTTP on 127.0.0.1:`port`. Static files only, no SPA fallback. */
 export function startStaticServer(
   rootDir: string,
@@ -80,15 +82,54 @@ export function startStaticServer(
   })
 
   return new Promise((resolvePromise, reject) => {
-    server.on("error", reject)
-    server.listen(port, "127.0.0.1", () => {
-      resolvePromise({
-        url: `http://127.0.0.1:${port}`,
-        close: () =>
-          new Promise((done) => {
-            server.close(() => done())
-          }),
+    let currentPort = port
+    const lastPort = Math.min(port + MAX_PORT_ATTEMPTS - 1, 65_535)
+
+    const listen = () => {
+      const handleError = (error: NodeJS.ErrnoException) => {
+        if (error.code === "EADDRINUSE" && currentPort < lastPort) {
+          currentPort += 1
+          listen()
+          return
+        }
+        if (error.code === "EADDRINUSE") {
+          reject(
+            new Error(
+              `Could not start the static server: ports ${port}-${currentPort} are already in use.`
+            )
+          )
+          return
+        }
+        reject(error)
+      }
+
+      server.once("error", handleError)
+      server.listen(currentPort, "127.0.0.1", () => {
+        server.off("error", handleError)
+        const address = server.address()
+        if (!address || typeof address === "string") {
+          server.close()
+          reject(new Error("Could not determine the static server port."))
+          return
+        }
+        resolvePromise({
+          url: `http://127.0.0.1:${address.port}`,
+          close: () =>
+            new Promise((done) => {
+              server.close(() => done())
+            }),
+        })
       })
-    })
+    }
+
+    if (lastPort < port) {
+      reject(new Error(`Could not start the static server on invalid port ${port}.`))
+      return
+    }
+    try {
+      listen()
+    } catch (error) {
+      reject(error)
+    }
   })
 }

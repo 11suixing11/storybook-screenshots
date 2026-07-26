@@ -111,7 +111,7 @@ the changed-story allowlist without capturing:
 | `statsFile`         | `string`                               | `<storybookDir>/preview-stats.json`          | Module-graph stats for incremental mode (build with `--stats-json`).      |
 | `fingerprintDir`    | `string`                               | `<snapshotDir>/fingerprints`                 | Committed fingerprint store (a directory of per-story files) for incremental mode. |
 | `globalDeps`        | `string[]`                             | `[".storybook"]`                             | Paths folded into the global fingerprint; a change re-captures all.       |
-| `port`              | `number`                               | `6007`                                       | Port for the built-in static server.                                     |
+| `port`              | `number`                               | `6007`                                       | Preferred port for the built-in static server; if busy, the next available port is used. |
 
 Baselines are written to `<snapshotDir>/<browser>-<viewport>[-<theme>]/<story-id>.png`.
 With theme `group`s, the group is the folder and the theme name becomes a filename

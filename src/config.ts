@@ -150,7 +150,7 @@ export interface StorybookScreenshotsConfig {
    * don't belong here. Default: `[".storybook"]` (see `DEFAULT_GLOBAL_DEPS`).
    */
   globalDeps?: string[]
-  /** Port for the built-in static server. Default: `6007`. */
+  /** Preferred port for the built-in static server. If busy, the next available port is used. Default: `6007`. */
   port?: number
 }
 
