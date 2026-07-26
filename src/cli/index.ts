@@ -1,5 +1,6 @@
 #!/usr/bin/env node
-import { existsSync, readFileSync } from "node:fs"
+import { existsSync } from "node:fs"
+import { readJsonFile } from "../json.js"
 import { affected, run } from "../run.js"
 
 const argv = process.argv.slice(2)
@@ -19,10 +20,12 @@ function resolveOnly(value: string | undefined): string[] | undefined {
     return undefined
   }
   if (existsSync(value)) {
-    const parsed = JSON.parse(readFileSync(value, "utf8")) as {
+    const parsed = readJsonFile<{
       all?: boolean
       storyIds?: string[]
-    }
+    }>(value, "--only file", {
+      hint: "Expected JSON like { \"all\": false, \"storyIds\": [\"component--story\"] }.",
+    })
     return parsed.all ? undefined : (parsed.storyIds ?? [])
   }
   return value

@@ -4,6 +4,7 @@ import type {
   ScreenshotTheme,
   ScreenshotViewport,
 } from "../config.js"
+import { parseJson } from "../json.js"
 
 /** Resolved options the CLI hands to the Playwright runtime via an env var. */
 export interface RuntimeOptions {
@@ -38,5 +39,7 @@ export function readRuntimeOptions(): RuntimeOptions {
       `${RUNTIME_ENV_KEY} is not set. Run the bundled config through the storybook-screenshots CLI, not 'playwright test' directly.`
     )
   }
-  return JSON.parse(raw) as RuntimeOptions
+  return parseJson<RuntimeOptions>(raw, `${RUNTIME_ENV_KEY} runtime options`, {
+    hint: "Run the bundled config through the storybook-screenshots CLI, not 'playwright test' directly.",
+  })
 }

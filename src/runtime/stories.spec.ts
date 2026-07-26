@@ -1,7 +1,7 @@
-import { readFileSync } from "node:fs"
 import { join, posix } from "node:path"
 import { expect, type Page, test } from "@playwright/test"
 import type { ScreenshotTheme } from "../config.js"
+import { readJsonFile } from "../json.js"
 import { readRuntimeOptions } from "./options.js"
 
 interface StoryEntry {
@@ -18,9 +18,13 @@ interface StorybookIndex {
 
 const options = readRuntimeOptions()
 
-const index = JSON.parse(
-  readFileSync(join(options.storybookDir, "index.json"), "utf8")
-) as StorybookIndex
+const index = readJsonFile<StorybookIndex>(
+  join(options.storybookDir, "index.json"),
+  "Storybook index",
+  {
+    hint: "Build Storybook first or point storybookDir at a built Storybook containing index.json.",
+  }
+)
 
 const only = options.only ? new Set(options.only) : null
 const stories = Object.values(index.entries).filter(
