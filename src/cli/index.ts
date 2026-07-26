@@ -1,12 +1,12 @@
 #!/usr/bin/env node
 import { existsSync, readFileSync } from "node:fs"
 import { affected, run } from "../run.js"
+import { flagValue as readFlagValue } from "./args.js"
 
 const argv = process.argv.slice(2)
 
 function flagValue(...names: string[]): string | undefined {
-  const index = argv.findIndex((arg) => names.includes(arg))
-  return index === -1 ? undefined : argv[index + 1]
+  return readFlagValue(argv, ...names)
 }
 
 /**
