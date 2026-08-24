@@ -1,6 +1,11 @@
 # pnpm settings live here, not in the "pnpm" field of package.json: pnpm 11 no
 # longer reads that field. See https://pnpm.io/settings
 
+# Let esbuild run its install script: it fetches a native binary. Without
+# this pnpm 11 fails the install outright with ERR_PNPM_IGNORED_BUILDS.
+allowBuilds:
+  esbuild: true
+
 # Install native binaries for every platform we work from, not just the one
 # running pnpm. This repo is installed both from macOS and from a Linux
 # sandbox, and a single-platform install breaks the other side.
