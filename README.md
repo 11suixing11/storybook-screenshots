@@ -84,7 +84,7 @@ walking up from the current directory.
 | `--no-build`     | Skip `buildCommand` and screenshot the existing `storybookDir`.             |
 | `--changed`      | Incremental: capture only stories whose fingerprint changed.                |
 | `--only <v>`     | Restrict to an allowlist — an `affected` JSON file or a comma list of IDs.  |
-| `--fingerprint-dir <path>` | Override the config `fingerprintDir` — let a shared CI pipeline own the store path. |
+| `--fingerprint-dir <path>` | Override the config `fingerprintDir` — point the store at a CI-cached path. |
 
 Plus an `affected` subcommand that refreshes the fingerprint store and writes
 the changed-story allowlist without capturing:
@@ -96,7 +96,7 @@ the changed-story allowlist without capturing:
 | ------------------- | -------------------------------------- | -------------------------------------------- | ------------------------------------------------------------------------ |
 | `buildCommand`      | `string`                               | —                                            | Command that builds Storybook into `storybookDir`. Omit if pre-built.    |
 | `storybookDir`      | `string`                               | `"storybook-static"`                         | Built Storybook directory (must contain `index.json`).                   |
-| `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared (default parent of `fingerprintDir`). |
+| `snapshotDir`       | `string`                               | `"__screenshots__"`                          | Where baseline PNGs are written/compared.                                  |
 | `colocate`          | `boolean`                              | `false`                                      | Store baselines next to each story's source file (see [Co-location](#co-location)). |
 | `pathSegments`      | `("browser"\|"viewport"\|"theme")[]`   | `["browser","viewport","theme"]`             | Order of the folder segments in a baseline path.                          |
 | `nestedFolders`     | `boolean`                              | `false`                                      | Nest segments as folders (`browser/theme/viewport/`) vs `-`-joined.       |
@@ -110,7 +110,7 @@ the changed-story allowlist without capturing:
 | `retries`           | `number`                               | `2`                                          | Retry count (applied on CI).                                             |
 | `workers`           | `number \| string`                     | Playwright default (½ cores)                 | Parallel workers; a count or a percentage string like `"100%"`.          |
 | `statsFile`         | `string`                               | `<storybookDir>/preview-stats.json`          | Module-graph stats for incremental mode (build with `--stats-json`).      |
-| `fingerprintDir`    | `string`                               | `<snapshotDir>/fingerprints`                 | Committed fingerprint store (a directory of per-story files) for incremental mode. |
+| `fingerprintDir`    | `string`                               | `".fingerprints"`                            | Fingerprint store for incremental mode. Keep it in CI cache, not git (see [Incremental capture](#incremental-capture-changed-stories-only)). |
 | `globalDeps`        | `string[]`                             | `[".storybook"]`                             | Paths folded into the global fingerprint; a change re-captures all.       |
 | `port`              | `number`                               | `6007`                                       | Port for the built-in static server.                                     |
 
@@ -186,9 +186,9 @@ src/button/
 ```
 
 Combine with theme `group`s and a snapshot glob that matches the new location
-(e.g. `src/**/__screenshots__/**`). The fingerprint store is a directory that
-still lives under `snapshotDir` (or set `fingerprintDir`); commit it alongside
-the baselines.
+(e.g. `src/**/__screenshots__/**`). The fingerprint store is unaffected — it
+stays at its git-ignored, CI-cached path (see
+[Incremental capture](#incremental-capture-changed-stories-only)).
 
 ## Interactive stories
 
@@ -307,10 +307,9 @@ Even sharded, capturing every story on every PR is wasteful when a change touche
 one component. Incremental mode captures only the stories a change set can
 affect; the committed baselines are the cache for the rest.
 
-It works like Chromatic's TurboSnap, but tracks changes with a committed
-**fingerprint store** instead of a git diff — so it needs no base ref and
-behaves the same on PRs and on push to the default branch. Build Storybook with
-`--stats-json` to emit a module-dependency graph
+It works like Chromatic's TurboSnap, but tracks changes with a **fingerprint
+store** instead of a git diff — so it needs no base ref and no git history.
+Build Storybook with `--stats-json` to emit a module-dependency graph
 (`storybook-static/preview-stats.json`), then:
 
 1. For each story, hash everything it renders from — its transitive modules from
@@ -318,19 +317,11 @@ behaves the same on PRs and on push to the default branch. Build Storybook with
    **content**). A separate global fingerprint covers the shared inputs
    (`globalDeps`, the config, and the `storybook-screenshots` /
    `@playwright/test` versions).
-2. Compare against the committed store (a directory under `snapshotDir`):
+2. Compare against the store from the last successful run:
    - no store, or the global fingerprint changed → **every** story runs;
    - otherwise only stories whose hash changed run.
-3. The refreshed store is committed next to the baselines, so after a merge the
-   fingerprints match and nothing re-runs.
-
-The store is a **directory**, not one file: `global.json` plus one
-`stories/<id>.txt` per story. That is deliberate — a single flat manifest makes
-every branch touching overlapping story closures rewrite the same lines, so two
-concurrent PRs always collide on it. Per-story files only conflict when both
-branches change the *same* story (which already conflicts on that story's
-baseline PNG). Keeping the global hash out of the per-story files means a
-`.storybook` change flips one small `global.json`, not every story file.
+3. Once the affected stories pass, the refreshed store is written back for the
+   next run to compare against.
 
 A dependency bump re-captures only the stories that use it (the version is in the
 module path); a theme/config/global change re-captures everything. Granularity is
@@ -342,22 +333,80 @@ storybook build --stats-json
 storybook-screenshots --update --no-build --changed
 ```
 
-In a sharded pipeline, compute the allowlist once and pass it to every shard.
-`affected` also rewrites the fingerprint store, which must be committed with the
-baselines (it lives under `snapshotDir`, so the snapshot glob already covers it):
+#### Keep the store in CI cache, not in git
+
+The store is derived state — a pure function of the tree — so **don't commit
+it**. Story closures overlap on shared code (a design system, tokens, utils):
+two concurrent PRs that touch shared files rewrite largely the same hash files
+with different values and conflict on every one of them, and a dependency bump
+rewrites hundreds. In a CI cache the same churn is invisible and there is
+nothing to merge. On disk the store is a directory: `global.json` for the
+shared inputs plus one `stories/<id>.txt` per story.
+
+The store defaults to `.fingerprints` in the repo root (override with config
+`fingerprintDir` or `--fingerprint-dir`). Add it to `.gitignore` and wrap the
+run in `actions/cache`, keyed per branch with a fallback to the default branch:
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: .fingerprints
+    # Cache entries are immutable, so key each run uniquely; restore-keys picks
+    # the newest match — this branch's last store, else the default branch's.
+    key: fingerprints-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
+    restore-keys: |
+      fingerprints-${{ github.head_ref || github.ref_name }}-
+      fingerprints-${{ github.event.repository.default_branch }}-
+- run: npm run build-storybook -- --stats-json
+- run: npx storybook-screenshots --update --no-build --changed
+```
+
+Run the same workflow on pushes to the default branch so its store exists as
+the fallback for fresh branches. The pieces fail safe on their own:
+
+- A missing or stale store never under-reports: no store reads as "no
+  fingerprints", and every story is captured.
+- The store is written only after the affected stories **pass**, and
+  `actions/cache` saves only when the job succeeds — a red run never marks
+  broken stories as up to date.
+- GitHub scopes a branch's caches to that branch and shares default-branch
+  caches with every branch — exactly the isolation the store needs.
+- Worst case (the cache evicted after a week unused) is one full capture.
+
+If you previously committed the store (the old default put it under
+`<snapshotDir>/fingerprints`), delete it and drop it from your snapshot glob;
+the next run captures everything once and repopulates the cache.
+
+In a sharded pipeline, compute the allowlist once, hand it to every shard, and
+save the refreshed store only after **all** shards pass — restore and save are
+split so a failed shard leaves the old store in place:
 
 ```yaml
 # in the build job, after `storybook build --stats-json`:
+- uses: actions/cache/restore@v4
+  with:
+    path: .fingerprints
+    key: fingerprints-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
+    restore-keys: |
+      fingerprints-${{ github.head_ref || github.ref_name }}-
+      fingerprints-${{ github.event.repository.default_branch }}-
+# `affected` refreshes .fingerprints in place; pass it forward as an artifact.
 - run: npx storybook-screenshots affected --out affected.json
 - uses: actions/upload-artifact@v4
   with: { name: affected, path: affected.json }
 - uses: actions/upload-artifact@v4
-  with: { name: fingerprints, path: screenshots/__screenshots__/fingerprints }
+  with: { name: fingerprints, path: .fingerprints }
 
 # in each shard, after downloading storybook-static + affected:
 - run: npx storybook-screenshots --update --no-build --shard ${{ matrix.shard }}/4 --only affected.json
 
-# in the pr job, restore the fingerprints dir next to the baselines before opening the PR.
+# in the pr job (needs: screenshots — reached only when every shard passed):
+- uses: actions/download-artifact@v4
+  with: { name: fingerprints, path: .fingerprints }
+- uses: actions/cache/save@v4
+  with:
+    path: .fingerprints
+    key: fingerprints-${{ github.head_ref || github.ref_name }}-${{ github.run_id }}
 ```
 
 An `affected.json` of `{ "all": true }` (a global change, or any uncertainty —
