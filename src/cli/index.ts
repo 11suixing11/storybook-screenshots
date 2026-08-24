@@ -32,11 +32,14 @@ function resolveOnly(value: string | undefined): string[] | undefined {
 }
 
 const configPath = flagValue("--config", "-c")
+// Override the fingerprint store location from the command line — lets a shared
+// CI pipeline own the path instead of each repo's config.
+const fingerprintDir = flagValue("--fingerprint-dir")
 
-// `affected` subcommand: refresh the manifest and write the changed-story allowlist.
+// `affected` subcommand: refresh the store and write the changed-story allowlist.
 if (argv[0] === "affected") {
   const out = flagValue("--out")
-  affected({ configPath, out })
+  affected({ configPath, out, fingerprintDir })
     .then((result) => {
       console.log(
         result.all
@@ -61,7 +64,7 @@ if (argv[0] === "affected") {
   // Run a precomputed allowlist (file or comma list) — pairs with `affected`.
   const only = resolveOnly(flagValue("--only"))
 
-  run({ changed, configPath, only, shard, skipBuild, update })
+  run({ changed, configPath, fingerprintDir, only, shard, skipBuild, update })
     .then((code) => process.exit(code))
     .catch((error: unknown) => {
       console.error(error)
