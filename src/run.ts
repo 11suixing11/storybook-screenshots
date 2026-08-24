@@ -25,14 +25,15 @@ export interface RunOptions {
   only?: string[]
   /**
    * Incremental mode: capture only stories whose fingerprint changed since the
-   * committed fingerprints (reuses committed baselines for the rest), then
+   * stored fingerprints (reuses committed baselines for the rest), then
    * rewrite the fingerprint store on success.
    */
   changed?: boolean
   /**
-   * Override the committed fingerprint store directory (config `fingerprintDir`).
-   * Lets a shared CI pipeline own the store location so every repo agrees on it
-   * without setting it in each repo's config. Relative to the config's directory.
+   * Override the fingerprint store directory (config `fingerprintDir`) — e.g.
+   * point it at a CI-cached path. Lets a shared CI pipeline own the store
+   * location so every repo agrees on it without setting it in each repo's
+   * config. Relative to the config's directory.
    */
   fingerprintDir?: string
 }
@@ -122,15 +123,15 @@ export async function run(opts: RunOptions = {}): Promise<number> {
 }
 
 /**
- * Compare the freshly built fingerprints against the committed store to find
- * affected stories. Rewrites the committed store in place (so it can be
- * committed alongside the new baselines) and, optionally, writes the allowlist
+ * Compare the freshly built fingerprints against the stored ones to find
+ * affected stories. Rewrites the store in place (persist it back to the CI
+ * cache only once every shard has passed) and, optionally, writes the allowlist
  * to `out` as `{ all, storyIds }` for a sharded CI run to consume via `--only`.
  */
 export async function affected(opts: {
   configPath?: string
   out?: string
-  /** Override the committed fingerprint store directory (see `RunOptions.fingerprintDir`). */
+  /** Override the fingerprint store directory (see `RunOptions.fingerprintDir`). */
   fingerprintDir?: string
 }): Promise<AffectedResult> {
   const cwd = process.cwd()

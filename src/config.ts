@@ -83,8 +83,7 @@ export interface StorybookScreenshotsConfig {
   storybookDir?: string
   /**
    * Directory where baseline PNGs are written and compared. Default:
-   * `__screenshots__`. Ignored for baseline images when `colocate` is on (still
-   * used as the default parent of `fingerprintDir`).
+   * `__screenshots__`. Ignored for baseline images when `colocate` is on.
    */
   snapshotDir?: string
   /**
@@ -134,12 +133,11 @@ export interface StorybookScreenshotsConfig {
    */
   statsFile?: string
   /**
-   * Committed fingerprint store for incremental mode — a **directory**, not a
-   * single file. Holds `global.json` plus one `stories/<id>.txt` per story, so
-   * two branches that touch different stories update different files and git
-   * merges them without conflict (a single manifest.json made every concurrent
-   * PR collide). Lives under `snapshotDir` so it travels with the baselines.
-   * Default: `<snapshotDir>/fingerprints`.
+   * Fingerprint store for incremental mode — a **directory** holding
+   * `global.json` plus one `stories/<id>.txt` per story. Derived state, a pure
+   * function of the tree: keep it git-ignored and persist it in a per-branch CI
+   * cache instead — committing it makes concurrent PRs conflict on overlapping
+   * story closures. Default: `.fingerprints`.
    */
   fingerprintDir?: string
   /**
@@ -251,7 +249,7 @@ export function resolveConfig(
     retries: config.retries ?? 2,
     workers: config.workers ?? null,
     statsFile: toAbs(config.statsFile ?? join(storybookDir, "preview-stats.json")),
-    fingerprintDir: toAbs(config.fingerprintDir ?? join(snapshotDir, "fingerprints")),
+    fingerprintDir: toAbs(config.fingerprintDir ?? ".fingerprints"),
     globalDeps: config.globalDeps ?? DEFAULT_GLOBAL_DEPS,
     port: config.port ?? 6007,
   }
